@@ -4,10 +4,10 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "
 import { useEvent, useSize } from "react-use"
 import styled from "styled-components"
 import {
-	ClineApiReqInfo,
-	ClineAskUseMcpServer,
-	ClineMessage,
-	ClineSayTool,
+	mayaiApiReqInfo,
+	mayaiAskUseMcpServer,
+	mayaiMessage,
+	mayaiSayTool,
 	COMPLETION_RESULT_CHANGES_FLAG,
 	ExtensionMessage,
 } from "../../../../src/shared/ExtensionMessage"
@@ -36,10 +36,10 @@ const ChatRowContainer = styled.div`
 `
 
 interface ChatRowProps {
-	message: ClineMessage
+	message: mayaiMessage
 	isExpanded: boolean
 	onToggleExpand: () => void
-	lastModifiedMessage?: ClineMessage
+	lastModifiedMessage?: mayaiMessage
 	isLast: boolean
 	onHeightChange: (isTaller: boolean) => void
 }
@@ -106,7 +106,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 
 	const [cost, apiReqCancelReason, apiReqStreamingFailedMessage] = useMemo(() => {
 		if (message.text != null && message.say === "api_req_started") {
-			const info: ClineApiReqInfo = JSON.parse(message.text)
+			const info: mayaiApiReqInfo = JSON.parse(message.text)
 			return [info.cost, info.cancelReason, info.streamingFailedMessage]
 		}
 		return [undefined, undefined, undefined]
@@ -162,7 +162,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 							color: errorColor,
 							marginBottom: "-1.5px",
 						}}></span>,
-					<span style={{ color: errorColor, fontWeight: "bold" }}>Cline is having trouble...</span>,
+					<span style={{ color: errorColor, fontWeight: "bold" }}>mayai is having trouble...</span>,
 				]
 			case "auto_approval_max_req_reached":
 				return [
@@ -186,10 +186,10 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 								marginBottom: "-1.5px",
 							}}></span>
 					),
-					<span style={{ color: normalColor, fontWeight: "bold" }}>Cline wants to execute this command:</span>,
+					<span style={{ color: normalColor, fontWeight: "bold" }}>mayai wants to execute this command:</span>,
 				]
 			case "use_mcp_server":
-				const mcpServerUse = JSON.parse(message.text || "{}") as ClineAskUseMcpServer
+				const mcpServerUse = JSON.parse(message.text || "{}") as mayaiAskUseMcpServer
 				return [
 					isMcpServerResponding ? (
 						<ProgressIndicator />
@@ -202,7 +202,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 							}}></span>
 					),
 					<span style={{ color: normalColor, fontWeight: "bold" }}>
-						Cline wants to {mcpServerUse.type === "use_mcp_tool" ? "use a tool" : "access a resource"} on the{" "}
+						mayai wants to {mcpServerUse.type === "use_mcp_tool" ? "use a tool" : "access a resource"} on the{" "}
 						<code>{mcpServerUse.serverName}</code> MCP server:
 					</span>,
 				]
@@ -283,7 +283,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 							color: normalColor,
 							marginBottom: "-1.5px",
 						}}></span>,
-					<span style={{ color: normalColor, fontWeight: "bold" }}>Cline has a question:</span>,
+					<span style={{ color: normalColor, fontWeight: "bold" }}>mayai has a question:</span>,
 				]
 			default:
 				return [null, null]
@@ -306,7 +306,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 
 	const tool = useMemo(() => {
 		if (message.ask === "tool" || message.say === "tool") {
-			return JSON.parse(message.text || "{}") as ClineSayTool
+			return JSON.parse(message.text || "{}") as mayaiSayTool
 		}
 		return null
 	}, [message.ask, message.say, message.text])
@@ -327,7 +327,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 					<>
 						<div style={headerStyle}>
 							{toolIcon("edit")}
-							<span style={{ fontWeight: "bold" }}>Cline wants to edit this file:</span>
+							<span style={{ fontWeight: "bold" }}>mayai wants to edit this file:</span>
 						</div>
 						<CodeAccordian
 							// isLoading={message.partial}
@@ -343,7 +343,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 					<>
 						<div style={headerStyle}>
 							{toolIcon("new-file")}
-							<span style={{ fontWeight: "bold" }}>Cline wants to create a new file:</span>
+							<span style={{ fontWeight: "bold" }}>mayai wants to create a new file:</span>
 						</div>
 						<CodeAccordian
 							isLoading={message.partial}
@@ -360,8 +360,8 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 						<div style={headerStyle}>
 							{toolIcon("file-code")}
 							<span style={{ fontWeight: "bold" }}>
-								{/* {message.type === "ask" ? "" : "Cline read this file:"} */}
-								Cline wants to read this file:
+								{/* {message.type === "ask" ? "" : "mayai read this file:"} */}
+								mayai wants to read this file:
 							</span>
 						</div>
 						{/* <CodeAccordian
@@ -425,8 +425,8 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 							{toolIcon("folder-opened")}
 							<span style={{ fontWeight: "bold" }}>
 								{message.type === "ask"
-									? "Cline wants to view the top level files in this directory:"
-									: "Cline viewed the top level files in this directory:"}
+									? "mayai wants to view the top level files in this directory:"
+									: "mayai viewed the top level files in this directory:"}
 							</span>
 						</div>
 						<CodeAccordian
@@ -445,8 +445,8 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 							{toolIcon("folder-opened")}
 							<span style={{ fontWeight: "bold" }}>
 								{message.type === "ask"
-									? "Cline wants to recursively view all files in this directory:"
-									: "Cline recursively viewed all files in this directory:"}
+									? "mayai wants to recursively view all files in this directory:"
+									: "mayai recursively viewed all files in this directory:"}
 							</span>
 						</div>
 						<CodeAccordian
@@ -465,8 +465,8 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 							{toolIcon("file-code")}
 							<span style={{ fontWeight: "bold" }}>
 								{message.type === "ask"
-									? "Cline wants to view source code definition names used in this directory:"
-									: "Cline viewed source code definition names used in this directory:"}
+									? "mayai wants to view source code definition names used in this directory:"
+									: "mayai viewed source code definition names used in this directory:"}
 							</span>
 						</div>
 						<CodeAccordian
@@ -483,7 +483,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 						<div style={headerStyle}>
 							{toolIcon("search")}
 							<span style={{ fontWeight: "bold" }}>
-								Cline wants to search this directory for <code>{tool.regex}</code>:
+								mayai wants to search this directory for <code>{tool.regex}</code>:
 							</span>
 						</div>
 						<CodeAccordian
@@ -504,9 +504,9 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 			// 				{isInspecting ? <ProgressIndicator /> : toolIcon("inspect")}
 			// 				<span style={{ fontWeight: "bold" }}>
 			// 					{message.type === "ask" ? (
-			// 						<>Cline wants to inspect this website:</>
+			// 						<>mayai wants to inspect this website:</>
 			// 					) : (
-			// 						<>Cline is inspecting this website:</>
+			// 						<>mayai is inspecting this website:</>
 			// 					)}
 			// 				</span>
 			// 			</div>
@@ -618,7 +618,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 	}
 
 	if (message.ask === "use_mcp_server" || message.say === "use_mcp_server") {
-		const useMcpServer = JSON.parse(message.text || "{}") as ClineAskUseMcpServer
+		const useMcpServer = JSON.parse(message.text || "{}") as mayaiAskUseMcpServer
 		const server = mcpServers.find((server) => server.name === useMcpServer.serverName)
 		return (
 			<>
@@ -745,7 +745,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 												<br />
 												It seems like you're having Windows PowerShell issues, please see this{" "}
 												<a
-													href="https://github.com/cline/cline/wiki/TroubleShooting-%E2%80%90-%22PowerShell-is-not-recognized-as-an-internal-or-external-command%22"
+													href="https://github.com/mayai/mayai/wiki/TroubleShooting-%E2%80%90-%22PowerShell-is-not-recognized-as-an-internal-or-external-command%22"
 													style={{
 														color: "inherit",
 														textDecoration: "underline",
@@ -886,7 +886,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 						</div>
 					)
 				case "user_feedback_diff":
-					const tool = JSON.parse(message.text || "{}") as ClineSayTool
+					const tool = JSON.parse(message.text || "{}") as mayaiSayTool
 					return (
 						<div
 							style={{
@@ -959,7 +959,7 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 							</div>
 						</>
 					)
-				case "clineignore_error":
+				case "mayaiignore_error":
 					return (
 						<>
 							<div
@@ -993,8 +993,8 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 									</span>
 								</div>
 								<div>
-									Cline tried to access <code>{message.text}</code> which is blocked by the{" "}
-									<code>.clineignore</code>
+									mayai tried to access <code>{message.text}</code> which is blocked by the{" "}
+									<code>.mayaiignore</code>
 									file.
 								</div>
 							</div>
@@ -1082,12 +1082,12 @@ export const ChatRowContent = ({ message, isExpanded, onToggleExpand, lastModifi
 									</span>
 								</div>
 								<div>
-									Cline won't be able to view the command's output. Please update VSCode (
+									mayai won't be able to view the command's output. Please update VSCode (
 									<code>CMD/CTRL + Shift + P</code> → "Update") and make sure you're using a supported shell:
 									zsh, bash, fish, or PowerShell (<code>CMD/CTRL + Shift + P</code> → "Terminal: Select Default
 									Profile").{" "}
 									<a
-										href="https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable"
+										href="https://github.com/mayai/mayai/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable"
 										style={{
 											color: "inherit",
 											textDecoration: "underline",

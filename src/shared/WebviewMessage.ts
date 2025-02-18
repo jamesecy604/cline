@@ -47,7 +47,7 @@ export interface WebviewMessage {
 	// | "relaunchChromeDebugMode"
 	text?: string
 	disabled?: boolean
-	askResponse?: ClineAskResponse
+	askResponse?: mayaiAskResponse
 	apiConfiguration?: ApiConfiguration
 	images?: string[]
 	bool?: boolean
@@ -63,6 +63,6 @@ export interface WebviewMessage {
 	autoApprove?: boolean
 }
 
-export type ClineAskResponse = "yesButtonClicked" | "noButtonClicked" | "messageResponse"
+export type mayaiAskResponse = "yesButtonClicked" | "noButtonClicked" | "messageResponse"
 
-export type ClineCheckpointRestore = "task" | "workspace" | "taskAndWorkspace"
+export type mayaiCheckpointRestore = "task" | "workspace" | "taskAndWorkspace"

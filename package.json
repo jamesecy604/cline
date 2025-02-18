@@ -1,6 +1,6 @@
 {
-	"name": "claude-dev",
-	"displayName": "Cline",
+	"name": "mayai",
+	"displayName": "Mayai",
 	"description": "Autonomous coding agent right in your IDE, capable of creating/editing files, running commands, using the browser, and more with your permission every step of the way.",
 	"version": "3.4.0",
 	"icon": "assets/icons/icon.png",
@@ -12,15 +12,11 @@
 		"vscode": "^1.84.0"
 	},
 	"author": {
-		"name": "Cline Bot Inc."
+		"name": "mayai Bot Inc."
 	},
 	"license": "Apache-2.0",
-	"publisher": "saoudrizwan",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/cline/cline"
-	},
-	"homepage": "https://cline.bot",
+	"publisher": "mayai",
+	"homepage": "http://localhost:3000",
 	"categories": [
 		"AI",
 		"Chat",
@@ -30,8 +26,7 @@
 		"Testing"
 	],
 	"keywords": [
-		"cline",
-		"claude",
+		"mayai",
 		"dev",
 		"mcp",
 		"openrouter",
@@ -50,7 +45,7 @@
 			"activitybar": [
 				{
 					"id": "claude-dev-ActivityBar",
-					"title": "Cline",
+					"title": "mayai",
 					"icon": "assets/icons/icon.svg"
 				}
 			]
@@ -66,69 +61,69 @@
 		},
 		"commands": [
 			{
-				"command": "cline.plusButtonClicked",
+				"command": "mayai.plusButtonClicked",
 				"title": "New Task",
 				"icon": "$(add)"
 			},
 			{
-				"command": "cline.mcpButtonClicked",
+				"command": "mayai.mcpButtonClicked",
 				"title": "MCP Servers",
 				"icon": "$(server)"
 			},
 			{
-				"command": "cline.historyButtonClicked",
+				"command": "mayai.historyButtonClicked",
 				"title": "History",
 				"icon": "$(history)"
 			},
 			{
-				"command": "cline.popoutButtonClicked",
+				"command": "mayai.popoutButtonClicked",
 				"title": "Open in Editor",
 				"icon": "$(link-external)"
 			},
 			{
-				"command": "cline.settingsButtonClicked",
+				"command": "mayai.settingsButtonClicked",
 				"title": "Settings",
 				"icon": "$(settings-gear)"
 			},
 			{
-				"command": "cline.openInNewTab",
+				"command": "mayai.openInNewTab",
 				"title": "Open In New Tab",
-				"category": "Cline"
+				"category": "mayai"
 			}
 		],
 		"menus": {
 			"view/title": [
 				{
-					"command": "cline.plusButtonClicked",
+					"command": "mayai.plusButtonClicked",
 					"group": "navigation@1",
 					"when": "view == claude-dev.SidebarProvider"
 				},
 				{
-					"command": "cline.mcpButtonClicked",
+					"command": "mayai.mcpButtonClicked",
 					"group": "navigation@2",
 					"when": "view == claude-dev.SidebarProvider"
 				},
 				{
-					"command": "cline.historyButtonClicked",
+					"command": "mayai.historyButtonClicked",
 					"group": "navigation@3",
 					"when": "view == claude-dev.SidebarProvider"
 				},
 				{
-					"command": "cline.popoutButtonClicked",
+					"command": "mayai.popoutButtonClicked",
 					"group": "navigation@4",
 					"when": "view == claude-dev.SidebarProvider"
 				},
 				{
-					"command": "cline.settingsButtonClicked",
+					"command": "mayai.settingsButtonClicked",
 					"group": "navigation@5",
 					"when": "view == claude-dev.SidebarProvider"
 				}
 			]
 		},
 		"configuration": {
-			"title": "Cline",
+			"title": "mayai",
 			"properties": {
-				"cline.vsCodeLmModelSelector": {
+				"mayai.vsCodeLmModelSelector": {
 					"type": "object",
 					"properties": {
 						"vendor": {
@@ -142,7 +137,7 @@
 					},
 					"description": "Settings for VSCode Language Model API"
 				},
-				"cline.mcp.mode": {
+				"mayai.mcp.mode": {
 					"type": "string",
 					"enum": [
 						"full",
@@ -157,17 +152,17 @@
 					"default": "full",
 					"description": "Controls MCP inclusion in prompts, reduces token usage if you only need access to certain functionality."
 				},
-				"cline.enableCheckpoints": {
+				"mayai.enableCheckpoints": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enables extension to save checkpoints of workspace throughout the task."
 				},
-				"cline.disableBrowserTool": {
+				"mayai.disableBrowserTool": {
 					"type": "boolean",
 					"default": false,
 					"description": "Disables extension from spawning browser session."
 				},
-				"cline.modelSettings.o3Mini.reasoningEffort": {
+				"mayai.modelSettings.o3Mini.reasoningEffort": {
 					"type": "string",
 					"enum": [
 						"low",
@@ -177,7 +172,7 @@
 					"default": "medium",
 					"description": "Controls the reasoning effort when using the o3-mini model. Higher values may result in more thorough but slower responses."
 				},
-				"cline.chromeExecutablePath": {
+				"mayai.chromeExecutablePath": {
 					"type": "string",
 					"default": null,
 					"description": "Path to Chrome executable for browser use functionality. If not set, the extension will attempt to find or download it automatically."

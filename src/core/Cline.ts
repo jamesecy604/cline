@@ -34,31 +34,31 @@ import {
 	BrowserAction,
 	BrowserActionResult,
 	browserActions,
-	ClineApiReqCancelReason,
-	ClineApiReqInfo,
-	ClineAsk,
-	ClineAskUseMcpServer,
-	ClineMessage,
-	ClineSay,
-	ClineSayBrowserAction,
-	ClineSayTool,
+	mayaiApiReqCancelReason,
+	mayaiApiReqInfo,
+	mayaiAsk,
+	mayaiAskUseMcpServer,
+	mayaiMessage,
+	mayaiSay,
+	mayaiSayBrowserAction,
+	mayaiSayTool,
 	COMPLETION_RESULT_CHANGES_FLAG,
 } from "../shared/ExtensionMessage"
 import { getApiMetrics } from "../shared/getApiMetrics"
 import { HistoryItem } from "../shared/HistoryItem"
-import { ClineAskResponse, ClineCheckpointRestore } from "../shared/WebviewMessage"
+import { mayaiAskResponse, mayaiCheckpointRestore } from "../shared/WebviewMessage"
 import { calculateApiCost } from "../utils/cost"
 import { fileExistsAtPath } from "../utils/fs"
 import { arePathsEqual, getReadablePath } from "../utils/path"
 import { fixModelHtmlEscaping, removeInvalidChars } from "../utils/string"
 import { AssistantMessageContent, parseAssistantMessage, ToolParamName, ToolUseName } from "./assistant-message"
 import { constructNewFileContent } from "./assistant-message/diff"
-import { ClineIgnoreController, LOCK_TEXT_SYMBOL } from "./ignore/ClineIgnoreController"
+import { mayaiIgnoreController, LOCK_TEXT_SYMBOL } from "./ignore/mayaiIgnoreController"
 import { parseMentions } from "./mentions"
 import { formatResponse } from "./prompts/responses"
 import { addUserInstructions, SYSTEM_PROMPT } from "./prompts/system"
 import { getNextTruncationRange, getTruncatedMessages } from "./sliding-window"
-import { ClineProvider, GlobalFileNames } from "./webview/ClineProvider"
+import { mayaiProvider, GlobalFileNames } from "./webview/mayaiProvider"
 
 const cwd = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0) ?? path.join(os.homedir(), "Desktop") // may or may not exist but fs checking existence would immediately ask for permission which would be bad UX, need to come up with a better solution
 
@@ -67,7 +67,7 @@ type UserContent = Array<
 	Anthropic.TextBlockParam | Anthropic.ImageBlockParam | Anthropic.ToolUseBlockParam | Anthropic.ToolResultBlockParam
 >
 
-export class Cline {
+export class mayai {
 	readonly taskId: string
 	api: ApiHandler
 	private terminalManager: TerminalManager
@@ -79,15 +79,15 @@ export class Cline {
 	private browserSettings: BrowserSettings
 	private chatSettings: ChatSettings
 	apiConversationHistory: Anthropic.MessageParam[] = []
-	clineMessages: ClineMessage[] = []
-	private clineIgnoreController: ClineIgnoreController
-	private askResponse?: ClineAskResponse
+	mayaiMessages: mayaiMessage[] = []
+	private mayaiIgnoreController: mayaiIgnoreController
+	private askResponse?: mayaiAskResponse
 	private askResponseText?: string
 	private askResponseImages?: string[]
 	private lastMessageTs?: number
 	private consecutiveAutoApprovedRequestsCount: number = 0
 	private consecutiveMistakeCount: number = 0
-	private providerRef: WeakRef<ClineProvider>
+	private providerRef: WeakRef<mayaiProvider>
 	private abort: boolean = false
 	didFinishAbortingStream = false
 	abandoned = false
@@ -114,7 +114,7 @@ export class Cline {
 	private didAutomaticallyRetryFailedApiRequest = false
 
 	constructor(
-		provider: ClineProvider,
+		provider: mayaiProvider,
 		apiConfiguration: ApiConfiguration,
 		autoApprovalSettings: AutoApprovalSettings,
 		browserSettings: BrowserSettings,
@@ -124,9 +124,9 @@ export class Cline {
 		images?: string[],
 		historyItem?: HistoryItem,
 	) {
-		this.clineIgnoreController = new ClineIgnoreController(cwd)
-		this.clineIgnoreController.initialize().catch((error) => {
-			console.error("Failed to initialize ClineIgnoreController:", error)
+		this.mayaiIgnoreController = new mayaiIgnoreController(cwd)
+		this.mayaiIgnoreController.initialize().catch((error) => {
+			console.error("Failed to initialize mayaiIgnoreController:", error)
 		})
 		this.providerRef = new WeakRef(provider)
 		this.api = buildApiHandler(apiConfiguration)
@@ -200,7 +200,7 @@ export class Cline {
 		}
 	}
 
-	private async getSavedClineMessages(): Promise<ClineMessage[]> {
+	private async getSavedmayaiMessages(): Promise<mayaiMessage[]> {
 		const filePath = path.join(await this.ensureTaskDirectoryExists(), GlobalFileNames.uiMessages)
 		if (await fileExistsAtPath(filePath)) {
 			return JSON.parse(await fs.readFile(filePath, "utf8"))
@@ -216,31 +216,31 @@ export class Cline {
 		return []
 	}
 
-	private async addToClineMessages(message: ClineMessage) {
-		// these values allow us to reconstruct the conversation history at the time this cline message was created
-		// it's important that apiConversationHistory is initialized before we add cline messages
-		message.conversationHistoryIndex = this.apiConversationHistory.length - 1 // NOTE: this is the index of the last added message which is the user message, and once the clinemessages have been presented we update the apiconversationhistory with the completed assistant message. This means when resetting to a message, we need to +1 this index to get the correct assistant message that this tool use corresponds to
+	private async addTomayaiMessages(message: mayaiMessage) {
+		// these values allow us to reconstruct the conversation history at the time this mayai message was created
+		// it's important that apiConversationHistory is initialized before we add mayai messages
+		message.conversationHistoryIndex = this.apiConversationHistory.length - 1 // NOTE: this is the index of the last added message which is the user message, and once the mayaimessages have been presented we update the apiconversationhistory with the completed assistant message. This means when resetting to a message, we need to +1 this index to get the correct assistant message that this tool use corresponds to
 		message.conversationHistoryDeletedRange = this.conversationHistoryDeletedRange
-		this.clineMessages.push(message)
-		await this.saveClineMessages()
+		this.mayaiMessages.push(message)
+		await this.savemayaiMessages()
 	}
 
-	private async overwriteClineMessages(newMessages: ClineMessage[]) {
-		this.clineMessages = newMessages
-		await this.saveClineMessages()
+	private async overwritemayaiMessages(newMessages: mayaiMessage[]) {
+		this.mayaiMessages = newMessages
+		await this.savemayaiMessages()
 	}
 
-	private async saveClineMessages() {
+	private async savemayaiMessages() {
 		try {
 			const taskDir = await this.ensureTaskDirectoryExists()
 			const filePath = path.join(taskDir, GlobalFileNames.uiMessages)
-			await fs.writeFile(filePath, JSON.stringify(this.clineMessages))
+			await fs.writeFile(filePath, JSON.stringify(this.mayaiMessages))
 			// combined as they are in ChatView
-			const apiMetrics = getApiMetrics(combineApiRequests(combineCommandSequences(this.clineMessages.slice(1))))
-			const taskMessage = this.clineMessages[0] // first message is always the task say
+			const apiMetrics = getApiMetrics(combineApiRequests(combineCommandSequences(this.mayaiMessages.slice(1))))
+			const taskMessage = this.mayaiMessages[0] // first message is always the task say
 			const lastRelevantMessage =
-				this.clineMessages[
-					findLastIndex(this.clineMessages, (m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"))
+				this.mayaiMessages[
+					findLastIndex(this.mayaiMessages, (m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"))
 				]
 			let taskDirSize = 0
 			try {
@@ -264,15 +264,15 @@ export class Cline {
 				conversationHistoryDeletedRange: this.conversationHistoryDeletedRange,
 			})
 		} catch (error) {
-			console.error("Failed to save cline messages:", error)
+			console.error("Failed to save mayai messages:", error)
 		}
 	}
 
-	async restoreCheckpoint(messageTs: number, restoreType: ClineCheckpointRestore) {
-		const messageIndex = this.clineMessages.findIndex((m) => m.ts === messageTs)
-		const message = this.clineMessages[messageIndex]
+	async restoreCheckpoint(messageTs: number, restoreType: mayaiCheckpointRestore) {
+		const messageIndex = this.mayaiMessages.findIndex((m) => m.ts === messageTs)
+		const message = this.mayaiMessages[messageIndex]
 		if (!message) {
-			console.error("Message not found", this.clineMessages)
+			console.error("Message not found", this.mayaiMessages)
 			return
 		}
 
@@ -320,11 +320,11 @@ export class Cline {
 					await this.overwriteApiConversationHistory(newConversationHistory)
 
 					// aggregate deleted api reqs info so we don't lose costs/tokens
-					const deletedMessages = this.clineMessages.slice(messageIndex + 1)
+					const deletedMessages = this.mayaiMessages.slice(messageIndex + 1)
 					const deletedApiReqsMetrics = getApiMetrics(combineApiRequests(combineCommandSequences(deletedMessages)))
 
-					const newClineMessages = this.clineMessages.slice(0, messageIndex + 1)
-					await this.overwriteClineMessages(newClineMessages) // calls saveClineMessages which saves historyItem
+					const newmayaiMessages = this.mayaiMessages.slice(0, messageIndex + 1)
+					await this.overwritemayaiMessages(newmayaiMessages) // calls savemayaiMessages which saves historyItem
 
 					await this.say(
 						"deleted_api_reqs",
@@ -334,7 +334,7 @@ export class Cline {
 							cacheWrites: deletedApiReqsMetrics.totalCacheWrites,
 							cacheReads: deletedApiReqsMetrics.totalCacheReads,
 							cost: deletedApiReqsMetrics.totalCost,
-						} satisfies ClineApiReqInfo),
+						} satisfies mayaiApiReqInfo),
 					)
 					break
 				case "workspace":
@@ -355,7 +355,7 @@ export class Cline {
 
 			// Set isCheckpointCheckedOut flag on the message
 			// Find all checkpoint messages before this one
-			const checkpointMessages = this.clineMessages.filter((m) => m.say === "checkpoint_created")
+			const checkpointMessages = this.mayaiMessages.filter((m) => m.say === "checkpoint_created")
 			const currentMessageIndex = checkpointMessages.findIndex((m) => m.ts === messageTs)
 
 			// Set isCheckpointCheckedOut to false for all checkpoint messages
@@ -363,7 +363,7 @@ export class Cline {
 				m.isCheckpointCheckedOut = i === currentMessageIndex
 			})
 
-			await this.saveClineMessages()
+			await this.savemayaiMessages()
 
 			await this.providerRef.deref()?.postMessageToWebview({ type: "relinquishControl" })
 
@@ -379,8 +379,8 @@ export class Cline {
 		}
 
 		console.log("presentMultifileDiff", messageTs)
-		const messageIndex = this.clineMessages.findIndex((m) => m.ts === messageTs)
-		const message = this.clineMessages[messageIndex]
+		const messageIndex = this.mayaiMessages.findIndex((m) => m.ts === messageTs)
+		const message = this.mayaiMessages[messageIndex]
 		if (!message) {
 			console.error("Message not found")
 			relinquishButton()
@@ -422,7 +422,7 @@ export class Cline {
 			if (seeNewChangesSinceLastTaskCompletion) {
 				// Get last task completed
 				const lastTaskCompletedMessage = findLast(
-					this.clineMessages.slice(0, messageIndex),
+					this.mayaiMessages.slice(0, messageIndex),
 					(m) => m.say === "completion_result",
 				) // ask is only used to relinquish control, its the last say we care about
 				// if undefined, then we get diff from beginning of git
@@ -486,8 +486,8 @@ export class Cline {
 	}
 
 	async doesLatestTaskCompletionHaveNewChanges() {
-		const messageIndex = findLastIndex(this.clineMessages, (m) => m.say === "completion_result")
-		const message = this.clineMessages[messageIndex]
+		const messageIndex = findLastIndex(this.mayaiMessages, (m) => m.say === "completion_result")
+		const message = this.mayaiMessages[messageIndex]
 		if (!message) {
 			console.error("Completion message not found")
 			return false
@@ -510,7 +510,7 @@ export class Cline {
 		}
 
 		// Get last task completed
-		const lastTaskCompletedMessage = findLast(this.clineMessages.slice(0, messageIndex), (m) => m.say === "completion_result")
+		const lastTaskCompletedMessage = findLast(this.mayaiMessages.slice(0, messageIndex), (m) => m.say === "completion_result")
 
 		try {
 			// Get changed files between current state and commit
@@ -534,21 +534,21 @@ export class Cline {
 
 	// partial has three valid states true (partial message), false (completion of partial message), undefined (individual complete message)
 	async ask(
-		type: ClineAsk,
+		type: mayaiAsk,
 		text?: string,
 		partial?: boolean,
 	): Promise<{
-		response: ClineAskResponse
+		response: mayaiAskResponse
 		text?: string
 		images?: string[]
 	}> {
-		// If this Cline instance was aborted by the provider, then the only thing keeping us alive is a promise still running in the background, in which case we don't want to send its result to the webview as it is attached to a new instance of Cline now. So we can safely ignore the result of any active promises, and this class will be deallocated. (Although we set Cline = undefined in provider, that simply removes the reference to this instance, but the instance is still alive until this promise resolves or rejects.)
+		// If this mayai instance was aborted by the provider, then the only thing keeping us alive is a promise still running in the background, in which case we don't want to send its result to the webview as it is attached to a new instance of mayai now. So we can safely ignore the result of any active promises, and this class will be deallocated. (Although we set mayai = undefined in provider, that simply removes the reference to this instance, but the instance is still alive until this promise resolves or rejects.)
 		if (this.abort) {
-			throw new Error("Cline instance aborted")
+			throw new Error("mayai instance aborted")
 		}
 		let askTs: number
 		if (partial !== undefined) {
-			const lastMessage = this.clineMessages.at(-1)
+			const lastMessage = this.mayaiMessages.at(-1)
 			const isUpdatingPreviousPartial =
 				lastMessage && lastMessage.partial && lastMessage.type === "ask" && lastMessage.ask === type
 			if (partial) {
@@ -557,7 +557,7 @@ export class Cline {
 					lastMessage.text = text
 					lastMessage.partial = partial
 					// todo be more efficient about saving and posting only new data or one whole message at a time so ignore partial for saves, and only post parts of partial message instead of whole array in new listener
-					// await this.saveClineMessages()
+					// await this.savemayaiMessages()
 					// await this.providerRef.deref()?.postStateToWebview()
 					await this.providerRef.deref()?.postMessageToWebview({
 						type: "partialMessage",
@@ -571,7 +571,7 @@ export class Cline {
 					// this.askResponseImages = undefined
 					askTs = Date.now()
 					this.lastMessageTs = askTs
-					await this.addToClineMessages({
+					await this.addTomayaiMessages({
 						ts: askTs,
 						type: "ask",
 						ask: type,
@@ -600,7 +600,7 @@ export class Cline {
 					// lastMessage.ts = askTs
 					lastMessage.text = text
 					lastMessage.partial = false
-					await this.saveClineMessages()
+					await this.savemayaiMessages()
 					// await this.providerRef.deref()?.postStateToWebview()
 					await this.providerRef.deref()?.postMessageToWebview({
 						type: "partialMessage",
@@ -613,7 +613,7 @@ export class Cline {
 					this.askResponseImages = undefined
 					askTs = Date.now()
 					this.lastMessageTs = askTs
-					await this.addToClineMessages({
+					await this.addTomayaiMessages({
 						ts: askTs,
 						type: "ask",
 						ask: type,
@@ -624,13 +624,13 @@ export class Cline {
 			}
 		} else {
 			// this is a new non-partial message, so add it like normal
-			// const lastMessage = this.clineMessages.at(-1)
+			// const lastMessage = this.mayaiMessages.at(-1)
 			this.askResponse = undefined
 			this.askResponseText = undefined
 			this.askResponseImages = undefined
 			askTs = Date.now()
 			this.lastMessageTs = askTs
-			await this.addToClineMessages({
+			await this.addTomayaiMessages({
 				ts: askTs,
 				type: "ask",
 				ask: type,
@@ -654,19 +654,19 @@ export class Cline {
 		return result
 	}
 
-	async handleWebviewAskResponse(askResponse: ClineAskResponse, text?: string, images?: string[]) {
+	async handleWebviewAskResponse(askResponse: mayaiAskResponse, text?: string, images?: string[]) {
 		this.askResponse = askResponse
 		this.askResponseText = text
 		this.askResponseImages = images
 	}
 
-	async say(type: ClineSay, text?: string, images?: string[], partial?: boolean): Promise<undefined> {
+	async say(type: mayaiSay, text?: string, images?: string[], partial?: boolean): Promise<undefined> {
 		if (this.abort) {
-			throw new Error("Cline instance aborted")
+			throw new Error("mayai instance aborted")
 		}
 
 		if (partial !== undefined) {
-			const lastMessage = this.clineMessages.at(-1)
+			const lastMessage = this.mayaiMessages.at(-1)
 			const isUpdatingPreviousPartial =
 				lastMessage && lastMessage.partial && lastMessage.type === "say" && lastMessage.say === type
 			if (partial) {
@@ -683,7 +683,7 @@ export class Cline {
 					// this is a new partial message, so add it with partial state
 					const sayTs = Date.now()
 					this.lastMessageTs = sayTs
-					await this.addToClineMessages({
+					await this.addTomayaiMessages({
 						ts: sayTs,
 						type: "say",
 						say: type,
@@ -704,7 +704,7 @@ export class Cline {
 					lastMessage.partial = false
 
 					// instead of streaming partialMessage events, we do a save and post like normal to persist to disk
-					await this.saveClineMessages()
+					await this.savemayaiMessages()
 					// await this.providerRef.deref()?.postStateToWebview()
 					await this.providerRef.deref()?.postMessageToWebview({
 						type: "partialMessage",
@@ -714,7 +714,7 @@ export class Cline {
 					// this is a new partial=false message, so add it like normal
 					const sayTs = Date.now()
 					this.lastMessageTs = sayTs
-					await this.addToClineMessages({
+					await this.addTomayaiMessages({
 						ts: sayTs,
 						type: "say",
 						say: type,
@@ -728,7 +728,7 @@ export class Cline {
 			// this is a new non-partial message, so add it like normal
 			const sayTs = Date.now()
 			this.lastMessageTs = sayTs
-			await this.addToClineMessages({
+			await this.addTomayaiMessages({
 				ts: sayTs,
 				type: "say",
 				say: type,
@@ -742,18 +742,18 @@ export class Cline {
 	async sayAndCreateMissingParamError(toolName: ToolUseName, paramName: string, relPath?: string) {
 		await this.say(
 			"error",
-			`Cline tried to use ${toolName}${
+			`mayai tried to use ${toolName}${
 				relPath ? ` for '${relPath.toPosix()}'` : ""
 			} without value for required parameter '${paramName}'. Retrying...`,
 		)
 		return formatResponse.toolError(formatResponse.missingToolParameterError(paramName))
 	}
 
-	async removeLastPartialMessageIfExistsWithType(type: "ask" | "say", askOrSay: ClineAsk | ClineSay) {
-		const lastMessage = this.clineMessages.at(-1)
+	async removeLastPartialMessageIfExistsWithType(type: "ask" | "say", askOrSay: mayaiAsk | mayaiSay) {
+		const lastMessage = this.mayaiMessages.at(-1)
 		if (lastMessage?.partial && lastMessage.type === type && (lastMessage.ask === askOrSay || lastMessage.say === askOrSay)) {
-			this.clineMessages.pop()
-			await this.saveClineMessages()
+			this.mayaiMessages.pop()
+			await this.savemayaiMessages()
 			await this.providerRef.deref()?.postStateToWebview()
 		}
 	}
@@ -761,9 +761,9 @@ export class Cline {
 	// Task lifecycle
 
 	private async startTask(task?: string, images?: string[]): Promise<void> {
-		// conversationHistory (for API) and clineMessages (for webview) need to be in sync
-		// if the extension process were killed, then on restart the clineMessages might not be empty, so we need to set it to [] when we create a new Cline client (otherwise webview would show stale messages from previous session)
-		this.clineMessages = []
+		// conversationHistory (for API) and mayaiMessages (for webview) need to be in sync
+		// if the extension process were killed, then on restart the mayaiMessages might not be empty, so we need to set it to [] when we create a new mayai client (otherwise webview would show stale messages from previous session)
+		this.mayaiMessages = []
 		this.apiConversationHistory = []
 
 		await this.providerRef.deref()?.postStateToWebview()
@@ -792,54 +792,54 @@ export class Cline {
 		// 	this.checkpointTrackerErrorMessage = "Checkpoints are only available for new tasks"
 		// }
 
-		const modifiedClineMessages = await this.getSavedClineMessages()
+		const modifiedmayaiMessages = await this.getSavedmayaiMessages()
 
 		// Remove any resume messages that may have been added before
 		const lastRelevantMessageIndex = findLastIndex(
-			modifiedClineMessages,
+			modifiedmayaiMessages,
 			(m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"),
 		)
 		if (lastRelevantMessageIndex !== -1) {
-			modifiedClineMessages.splice(lastRelevantMessageIndex + 1)
+			modifiedmayaiMessages.splice(lastRelevantMessageIndex + 1)
 		}
 
 		// since we don't use api_req_finished anymore, we need to check if the last api_req_started has a cost value, if it doesn't and no cancellation reason to present, then we remove it since it indicates an api request without any partial content streamed
 		const lastApiReqStartedIndex = findLastIndex(
-			modifiedClineMessages,
+			modifiedmayaiMessages,
 			(m) => m.type === "say" && m.say === "api_req_started",
 		)
 		if (lastApiReqStartedIndex !== -1) {
-			const lastApiReqStarted = modifiedClineMessages[lastApiReqStartedIndex]
-			const { cost, cancelReason }: ClineApiReqInfo = JSON.parse(lastApiReqStarted.text || "{}")
+			const lastApiReqStarted = modifiedmayaiMessages[lastApiReqStartedIndex]
+			const { cost, cancelReason }: mayaiApiReqInfo = JSON.parse(lastApiReqStarted.text || "{}")
 			if (cost === undefined && cancelReason === undefined) {
-				modifiedClineMessages.splice(lastApiReqStartedIndex, 1)
+				modifiedmayaiMessages.splice(lastApiReqStartedIndex, 1)
 			}
 		}
 
-		await this.overwriteClineMessages(modifiedClineMessages)
-		this.clineMessages = await this.getSavedClineMessages()
+		await this.overwritemayaiMessages(modifiedmayaiMessages)
+		this.mayaiMessages = await this.getSavedmayaiMessages()
 
-		// Now present the cline messages to the user and ask if they want to resume (NOTE: we ran into a bug before where the apiconversationhistory wouldnt be initialized when opening a old task, and it was because we were waiting for resume)
+		// Now present the mayai messages to the user and ask if they want to resume (NOTE: we ran into a bug before where the apiconversationhistory wouldnt be initialized when opening a old task, and it was because we were waiting for resume)
 		// This is important in case the user deletes messages without resuming the task first
 		this.apiConversationHistory = await this.getSavedApiConversationHistory()
 
-		const lastClineMessage = this.clineMessages
+		const lastmayaiMessage = this.mayaiMessages
 			.slice()
 			.reverse()
 			.find((m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task")) // could be multiple resume tasks
-		// const lastClineMessage = this.clineMessages[lastClineMessageIndex]
+		// const lastmayaiMessage = this.mayaiMessages[lastmayaiMessageIndex]
 		// could be a completion result with a command
-		// const secondLastClineMessage = this.clineMessages
+		// const secondLastmayaiMessage = this.mayaiMessages
 		// 	.slice()
 		// 	.reverse()
 		// 	.find(
 		// 		(m, index) =>
-		// 			index !== lastClineMessageIndex && !(m.ask === "resume_task" || m.ask === "resume_completed_task")
+		// 			index !== lastmayaiMessageIndex && !(m.ask === "resume_task" || m.ask === "resume_completed_task")
 		// 	)
-		// (lastClineMessage?.ask === "command" && secondLastClineMessage?.ask === "completion_result")
+		// (lastmayaiMessage?.ask === "command" && secondLastmayaiMessage?.ask === "completion_result")
 
-		let askType: ClineAsk
-		if (lastClineMessage?.ask === "completion_result") {
+		let askType: mayaiAsk
+		if (lastmayaiMessage?.ask === "completion_result") {
 			askType = "resume_completed_task"
 		} else {
 			askType = "resume_task"
@@ -856,7 +856,7 @@ export class Cline {
 			responseImages = images
 		}
 
-		// need to make sure that the api conversation history can be resumed by the api, even if it goes out of sync with cline messages
+		// need to make sure that the api conversation history can be resumed by the api, even if it goes out of sync with mayai messages
 
 		let existingApiConversationHistory: Anthropic.Messages.MessageParam[] = await this.getSavedApiConversationHistory()
 
@@ -984,7 +984,7 @@ export class Cline {
 		let newUserContent: UserContent = [...modifiedOldUserContent]
 
 		const agoText = (() => {
-			const timestamp = lastClineMessage?.ts ?? Date.now()
+			const timestamp = lastmayaiMessage?.ts ?? Date.now()
 			const now = Date.now()
 			const diff = now - timestamp
 			const minutes = Math.floor(diff / 60000)
@@ -1003,7 +1003,7 @@ export class Cline {
 			return "just now"
 		})()
 
-		const wasRecent = lastClineMessage?.ts && Date.now() - lastClineMessage.ts < 30_000
+		const wasRecent = lastmayaiMessage?.ts && Date.now() - lastmayaiMessage.ts < 30_000
 
 		newUserContent.push({
 			type: "text",
@@ -1036,11 +1036,11 @@ export class Cline {
 		let nextUserContent = userContent
 		let includeFileDetails = true
 		while (!this.abort) {
-			const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails, isNewTask)
+			const didEndLoop = await this.recursivelyMakemayaiRequests(nextUserContent, includeFileDetails, isNewTask)
 			includeFileDetails = false // we only need file details the first time
 
-			//  The way this agentic loop works is that cline will be given a task that he then calls tools to complete. unless there's an attempt_completion call, we keep responding back to him with his tool's responses until he either attempt_completion or does not use anymore tools. If he does not use anymore tools, we ask him to consider if he's completed the task and then call attempt_completion, otherwise proceed with completing the task.
-			// There is a MAX_REQUESTS_PER_TASK limit to prevent infinite requests, but Cline is prompted to finish the task as efficiently as he can.
+			//  The way this agentic loop works is that mayai will be given a task that he then calls tools to complete. unless there's an attempt_completion call, we keep responding back to him with his tool's responses until he either attempt_completion or does not use anymore tools. If he does not use anymore tools, we ask him to consider if he's completed the task and then call attempt_completion, otherwise proceed with completing the task.
+			// There is a MAX_REQUESTS_PER_TASK limit to prevent infinite requests, but mayai is prompted to finish the task as efficiently as he can.
 
 			//const totalCost = this.calculateApiCost(totalInputTokens, totalOutputTokens)
 			if (didEndLoop) {
@@ -1050,7 +1050,7 @@ export class Cline {
 			} else {
 				// this.say(
 				// 	"tool",
-				// 	"Cline responded with only text blocks but has not called attempt_completion yet. Forcing him to continue with task..."
+				// 	"mayai responded with only text blocks but has not called attempt_completion yet. Forcing him to continue with task..."
 				// )
 				nextUserContent = [
 					{
@@ -1068,7 +1068,7 @@ export class Cline {
 		this.terminalManager.disposeAll()
 		this.urlContentFetcher.closeBrowser()
 		this.browserSession.closeBrowser()
-		this.clineIgnoreController.dispose()
+		this.mayaiIgnoreController.dispose()
 		await this.diffViewProvider.revertChanges() // need to await for when we want to make sure directories/files are reverted before re-starting the task from a checkpoint
 	}
 
@@ -1077,7 +1077,7 @@ export class Cline {
 	async saveCheckpoint(isAttemptCompletionMessage: boolean = false) {
 		const commitHash = await this.checkpointTracker?.commit() // silently fails for now
 		// Set isCheckpointCheckedOut to false for all checkpoint_created messages
-		this.clineMessages.forEach((message) => {
+		this.mayaiMessages.forEach((message) => {
 			if (message.say === "checkpoint_created") {
 				message.isCheckpointCheckedOut = false
 			}
@@ -1086,27 +1086,27 @@ export class Cline {
 			if (!isAttemptCompletionMessage) {
 				// For non-attempt completion we just say checkpoints
 				await this.say("checkpoint_created", commitHash)
-				const lastCheckpointMessage = findLast(this.clineMessages, (m) => m.say === "checkpoint_created")
+				const lastCheckpointMessage = findLast(this.mayaiMessages, (m) => m.say === "checkpoint_created")
 				if (lastCheckpointMessage) {
 					lastCheckpointMessage.lastCheckpointHash = commitHash
-					await this.saveClineMessages()
+					await this.savemayaiMessages()
 				}
 			} else {
 				// For attempt_completion, find the last completion_result message and set its checkpoint hash. This will be used to present the 'see new changes' button
 				const lastCompletionResultMessage = findLast(
-					this.clineMessages,
+					this.mayaiMessages,
 					(m) => m.say === "completion_result" || m.ask === "completion_result",
 				)
 				if (lastCompletionResultMessage) {
 					lastCompletionResultMessage.lastCheckpointHash = commitHash
-					await this.saveClineMessages()
+					await this.savemayaiMessages()
 				}
 			}
 
 			// Previously we checkpointed every message, but this is excessive and unnecessary.
 			// // Start from the end and work backwards until we find a tool use or another message with a hash
-			// for (let i = this.clineMessages.length - 1; i >= 0; i--) {
-			// 	const message = this.clineMessages[i]
+			// for (let i = this.mayaiMessages.length - 1; i >= 0; i--) {
+			// 	const message = this.mayaiMessages[i]
 			// 	if (message.lastCheckpointHash) {
 			// 		// Found a message with a hash, so we can stop
 			// 		break
@@ -1134,7 +1134,7 @@ export class Cline {
 			// 	}
 			// }
 			// // Save the updated messages
-			// await this.saveClineMessages()
+			// await this.savemayaiMessages()
 		}
 	}
 
@@ -1259,7 +1259,7 @@ export class Cline {
 			throw new Error("MCP hub not available")
 		}
 
-		const disableBrowserTool = vscode.workspace.getConfiguration("cline").get<boolean>("disableBrowserTool") ?? false
+		const disableBrowserTool = vscode.workspace.getConfiguration("mayai").get<boolean>("disableBrowserTool") ?? false
 		const modelSupportsComputerUse = this.api.getModel().info.supportsComputerUse ?? false
 
 		const supportsComputerUse = modelSupportsComputerUse && !disableBrowserTool // only enable computer use if the model supports it and the user hasn't disabled it
@@ -1267,35 +1267,35 @@ export class Cline {
 		let systemPrompt = await SYSTEM_PROMPT(cwd, supportsComputerUse, mcpHub, this.browserSettings)
 
 		let settingsCustomInstructions = this.customInstructions?.trim()
-		const clineRulesFilePath = path.resolve(cwd, GlobalFileNames.clineRules)
-		let clineRulesFileInstructions: string | undefined
-		if (await fileExistsAtPath(clineRulesFilePath)) {
+		const mayaiRulesFilePath = path.resolve(cwd, GlobalFileNames.mayaiRules)
+		let mayaiRulesFileInstructions: string | undefined
+		if (await fileExistsAtPath(mayaiRulesFilePath)) {
 			try {
-				const ruleFileContent = (await fs.readFile(clineRulesFilePath, "utf8")).trim()
+				const ruleFileContent = (await fs.readFile(mayaiRulesFilePath, "utf8")).trim()
 				if (ruleFileContent) {
-					clineRulesFileInstructions = `# .clinerules\n\nThe following is provided by a root-level .clinerules file where the user has specified instructions for this working directory (${cwd.toPosix()})\n\n${ruleFileContent}`
+					mayaiRulesFileInstructions = `# .mayairules\n\nThe following is provided by a root-level .mayairules file where the user has specified instructions for this working directory (${cwd.toPosix()})\n\n${ruleFileContent}`
 				}
 			} catch {
-				console.error(`Failed to read .clinerules file at ${clineRulesFilePath}`)
+				console.error(`Failed to read .mayairules file at ${mayaiRulesFilePath}`)
 			}
 		}
 
-		const clineIgnoreContent = this.clineIgnoreController.clineIgnoreContent
-		let clineIgnoreInstructions: string | undefined
-		if (clineIgnoreContent) {
-			clineIgnoreInstructions = `# .clineignore\n\n(The following is provided by a root-level .clineignore file where the user has specified files and directories that should not be accessed. When using list_files, you'll notice a ${LOCK_TEXT_SYMBOL} next to files that are blocked. Attempting to access the file's contents e.g. through read_file will result in an error.)\n\n${clineIgnoreContent}\n.clineignore`
+		const mayaiIgnoreContent = this.mayaiIgnoreController.mayaiIgnoreContent
+		let mayaiIgnoreInstructions: string | undefined
+		if (mayaiIgnoreContent) {
+			mayaiIgnoreInstructions = `# .mayaiignore\n\n(The following is provided by a root-level .mayaiignore file where the user has specified files and directories that should not be accessed. When using list_files, you'll notice a ${LOCK_TEXT_SYMBOL} next to files that are blocked. Attempting to access the file's contents e.g. through read_file will result in an error.)\n\n${mayaiIgnoreContent}\n.mayaiignore`
 		}
 
-		if (settingsCustomInstructions || clineRulesFileInstructions) {
+		if (settingsCustomInstructions || mayaiRulesFileInstructions) {
 			// altering the system prompt mid-task will break the prompt cache, but in the grand scheme this will not change often so it's better to not pollute user messages with it the way we have to with <potentially relevant details>
-			systemPrompt += addUserInstructions(settingsCustomInstructions, clineRulesFileInstructions, clineIgnoreInstructions)
+			systemPrompt += addUserInstructions(settingsCustomInstructions, mayaiRulesFileInstructions, mayaiIgnoreInstructions)
 		}
 
 		// If the previous API request's total token usage is close to the context window, truncate the conversation history to free up space for the new request
 		if (previousApiReqIndex >= 0) {
-			const previousRequest = this.clineMessages[previousApiReqIndex]
+			const previousRequest = this.mayaiMessages[previousApiReqIndex]
 			if (previousRequest && previousRequest.text) {
-				const { tokensIn, tokensOut, cacheWrites, cacheReads }: ClineApiReqInfo = JSON.parse(previousRequest.text)
+				const { tokensIn, tokensOut, cacheWrites, cacheReads }: mayaiApiReqInfo = JSON.parse(previousRequest.text)
 				const totalTokens = (tokensIn || 0) + (tokensOut || 0) + (cacheWrites || 0) + (cacheReads || 0)
 				let contextWindow = this.api.getModel().info.contextWindow || 128_000
 				// FIXME: hack to get anyone using openai compatible with deepseek to have the proper context window instead of the default 128k. We need a way for the user to specify the context window for models they input through openai compatible
@@ -1330,7 +1330,7 @@ export class Cline {
 						this.conversationHistoryDeletedRange,
 						keep,
 					)
-					await this.saveClineMessages() // saves task history item which we use to keep track of conversation history deleted range
+					await this.savemayaiMessages() // saves task history item which we use to keep track of conversation history deleted range
 					// await this.overwriteApiConversationHistory(truncatedMessages)
 				}
 			}
@@ -1383,7 +1383,7 @@ export class Cline {
 
 	async presentAssistantMessage() {
 		if (this.abort) {
-			throw new Error("Cline instance aborted")
+			throw new Error("mayai instance aborted")
 		}
 
 		if (this.presentAssistantMessageLocked) {
@@ -1558,7 +1558,7 @@ export class Cline {
 					}
 				}
 
-				const askApproval = async (type: ClineAsk, partialMessage?: string) => {
+				const askApproval = async (type: mayaiAsk, partialMessage?: string) => {
 					const { response, text, images } = await this.ask(type, partialMessage, false)
 					if (response !== "yesButtonClicked") {
 						// User pressed reject button or responded with a message, which we treat as a rejection
@@ -1643,10 +1643,10 @@ export class Cline {
 							break
 						}
 
-						const accessAllowed = this.clineIgnoreController.validateAccess(relPath)
+						const accessAllowed = this.mayaiIgnoreController.validateAccess(relPath)
 						if (!accessAllowed) {
-							await this.say("clineignore_error", relPath)
-							pushToolResult(formatResponse.toolError(formatResponse.clineIgnoreError(relPath)))
+							await this.say("mayaiignore_error", relPath)
+							pushToolResult(formatResponse.toolError(formatResponse.mayaiIgnoreError(relPath)))
 
 							break
 						}
@@ -1671,7 +1671,7 @@ export class Cline {
 									diff = removeInvalidChars(diff)
 								}
 
-								// open the editor if not done already.  This is to fix diff error when model provides correct search-replace text but Cline throws error
+								// open the editor if not done already.  This is to fix diff error when model provides correct search-replace text but mayai throws error
 								// because file is not open.
 								if (!this.diffViewProvider.isEditing) {
 									await this.diffViewProvider.open(relPath)
@@ -1722,7 +1722,7 @@ export class Cline {
 
 							newContent = newContent.trimEnd() // remove any trailing newlines, since it's automatically inserted by the editor
 
-							const sharedMessageProps: ClineSayTool = {
+							const sharedMessageProps: mayaiSayTool = {
 								tool: fileExists ? "editedExistingFile" : "newFileCreated",
 								path: getReadablePath(cwd, removeClosingTag("path", relPath)),
 								content: diff || content,
@@ -1794,7 +1794,7 @@ export class Cline {
 									// 		newContent,
 									// 	)
 									// : undefined,
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
@@ -1806,7 +1806,7 @@ export class Cline {
 								} else {
 									// If auto-approval is enabled but this tool wasn't auto-approved, send notification
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to ${fileExists ? "edit" : "create"} ${path.basename(relPath)}`,
+										`mayai wants to ${fileExists ? "edit" : "create"} ${path.basename(relPath)}`,
 									)
 									this.removeLastPartialMessageIfExistsWithType("say", "tool")
 									// const didApprove = await askApproval("tool", completeMessage)
@@ -1852,7 +1852,7 @@ export class Cline {
 											tool: fileExists ? "editedExistingFile" : "newFileCreated",
 											path: getReadablePath(cwd, relPath),
 											diff: userEdits,
-										} satisfies ClineSayTool),
+										} satisfies mayaiSayTool),
 									)
 									pushToolResult(
 										`The user made the following updates to your content:\n\n${userEdits}\n\n` +
@@ -1901,7 +1901,7 @@ export class Cline {
 					}
 					case "read_file": {
 						const relPath: string | undefined = block.params.path
-						const sharedMessageProps: ClineSayTool = {
+						const sharedMessageProps: mayaiSayTool = {
 							tool: "readFile",
 							path: getReadablePath(cwd, removeClosingTag("path", relPath)),
 						}
@@ -1910,7 +1910,7 @@ export class Cline {
 								const partialMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: undefined,
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", partialMessage, undefined, block.partial)
@@ -1927,10 +1927,10 @@ export class Cline {
 									break
 								}
 
-								const accessAllowed = this.clineIgnoreController.validateAccess(relPath)
+								const accessAllowed = this.mayaiIgnoreController.validateAccess(relPath)
 								if (!accessAllowed) {
-									await this.say("clineignore_error", relPath)
-									pushToolResult(formatResponse.toolError(formatResponse.clineIgnoreError(relPath)))
+									await this.say("mayaiignore_error", relPath)
+									pushToolResult(formatResponse.toolError(formatResponse.mayaiIgnoreError(relPath)))
 
 									break
 								}
@@ -1940,14 +1940,14 @@ export class Cline {
 								const completeMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: absolutePath,
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", completeMessage, undefined, false) // need to be sending partialValue bool, since undefined has its own purpose in that the message is treated neither as a partial or completion of a partial, but as a single complete message
 									this.consecutiveAutoApprovedRequestsCount++
 								} else {
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to read ${path.basename(absolutePath)}`,
+										`mayai wants to read ${path.basename(absolutePath)}`,
 									)
 									this.removeLastPartialMessageIfExistsWithType("say", "tool")
 									const didApprove = await askApproval("tool", completeMessage)
@@ -1971,7 +1971,7 @@ export class Cline {
 						const relDirPath: string | undefined = block.params.path
 						const recursiveRaw: string | undefined = block.params.recursive
 						const recursive = recursiveRaw?.toLowerCase() === "true"
-						const sharedMessageProps: ClineSayTool = {
+						const sharedMessageProps: mayaiSayTool = {
 							tool: !recursive ? "listFilesTopLevel" : "listFilesRecursive",
 							path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
 						}
@@ -1980,7 +1980,7 @@ export class Cline {
 								const partialMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: "",
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", partialMessage, undefined, block.partial)
@@ -2006,19 +2006,19 @@ export class Cline {
 									absolutePath,
 									files,
 									didHitLimit,
-									this.clineIgnoreController,
+									this.mayaiIgnoreController,
 								)
 								const completeMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: result,
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", completeMessage, undefined, false)
 									this.consecutiveAutoApprovedRequestsCount++
 								} else {
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to view directory ${path.basename(absolutePath)}/`,
+										`mayai wants to view directory ${path.basename(absolutePath)}/`,
 									)
 									this.removeLastPartialMessageIfExistsWithType("say", "tool")
 									const didApprove = await askApproval("tool", completeMessage)
@@ -2038,7 +2038,7 @@ export class Cline {
 					}
 					case "list_code_definition_names": {
 						const relDirPath: string | undefined = block.params.path
-						const sharedMessageProps: ClineSayTool = {
+						const sharedMessageProps: mayaiSayTool = {
 							tool: "listCodeDefinitionNames",
 							path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
 						}
@@ -2047,7 +2047,7 @@ export class Cline {
 								const partialMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: "",
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", partialMessage, undefined, block.partial)
@@ -2069,20 +2069,20 @@ export class Cline {
 								const absolutePath = path.resolve(cwd, relDirPath)
 								const result = await parseSourceCodeForDefinitionsTopLevel(
 									absolutePath,
-									this.clineIgnoreController,
+									this.mayaiIgnoreController,
 								)
 
 								const completeMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: result,
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", completeMessage, undefined, false)
 									this.consecutiveAutoApprovedRequestsCount++
 								} else {
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to view source code definitions in ${path.basename(absolutePath)}/`,
+										`mayai wants to view source code definitions in ${path.basename(absolutePath)}/`,
 									)
 									this.removeLastPartialMessageIfExistsWithType("say", "tool")
 									const didApprove = await askApproval("tool", completeMessage)
@@ -2104,7 +2104,7 @@ export class Cline {
 						const relDirPath: string | undefined = block.params.path
 						const regex: string | undefined = block.params.regex
 						const filePattern: string | undefined = block.params.file_pattern
-						const sharedMessageProps: ClineSayTool = {
+						const sharedMessageProps: mayaiSayTool = {
 							tool: "searchFiles",
 							path: getReadablePath(cwd, removeClosingTag("path", relDirPath)),
 							regex: removeClosingTag("regex", regex),
@@ -2115,7 +2115,7 @@ export class Cline {
 								const partialMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: "",
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", partialMessage, undefined, block.partial)
@@ -2145,20 +2145,20 @@ export class Cline {
 									absolutePath,
 									regex,
 									filePattern,
-									this.clineIgnoreController,
+									this.mayaiIgnoreController,
 								)
 
 								const completeMessage = JSON.stringify({
 									...sharedMessageProps,
 									content: results,
-								} satisfies ClineSayTool)
+								} satisfies mayaiSayTool)
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "tool")
 									await this.say("tool", completeMessage, undefined, false)
 									this.consecutiveAutoApprovedRequestsCount++
 								} else {
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to search files in ${path.basename(absolutePath)}/`,
+										`mayai wants to search files in ${path.basename(absolutePath)}/`,
 									)
 									this.removeLastPartialMessageIfExistsWithType("say", "tool")
 									const didApprove = await askApproval("tool", completeMessage)
@@ -2218,7 +2218,7 @@ export class Cline {
 											action: action as BrowserAction,
 											coordinate: removeClosingTag("coordinate", coordinate),
 											text: removeClosingTag("text", text),
-										} satisfies ClineSayBrowserAction),
+										} satisfies mayaiSayBrowserAction),
 										undefined,
 										block.partial,
 									)
@@ -2242,7 +2242,7 @@ export class Cline {
 										this.consecutiveAutoApprovedRequestsCount++
 									} else {
 										showNotificationForApprovalIfAutoApprovalEnabled(
-											`Cline wants to use a browser and launch ${url}`,
+											`mayai wants to use a browser and launch ${url}`,
 										)
 										this.removeLastPartialMessageIfExistsWithType("say", "browser_action_launch")
 										const didApprove = await askApproval("browser_action_launch", url)
@@ -2285,7 +2285,7 @@ export class Cline {
 											action: action as BrowserAction,
 											coordinate,
 											text,
-										} satisfies ClineSayBrowserAction),
+										} satisfies mayaiSayBrowserAction),
 										undefined,
 										false,
 									)
@@ -2381,11 +2381,11 @@ export class Cline {
 								}
 								this.consecutiveMistakeCount = 0
 
-								const ignoredFileAttemptedToAccess = this.clineIgnoreController.validateCommand(command)
+								const ignoredFileAttemptedToAccess = this.mayaiIgnoreController.validateCommand(command)
 								if (ignoredFileAttemptedToAccess) {
-									await this.say("clineignore_error", ignoredFileAttemptedToAccess)
+									await this.say("mayaiignore_error", ignoredFileAttemptedToAccess)
 									pushToolResult(
-										formatResponse.toolError(formatResponse.clineIgnoreError(ignoredFileAttemptedToAccess)),
+										formatResponse.toolError(formatResponse.mayaiIgnoreError(ignoredFileAttemptedToAccess)),
 									)
 
 									break
@@ -2400,7 +2400,7 @@ export class Cline {
 									didAutoApprove = true
 								} else {
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to execute a command: ${command}`,
+										`mayai wants to execute a command: ${command}`,
 									)
 									// this.removeLastPartialMessageIfExistsWithType("say", "command")
 									const didApprove = await askApproval(
@@ -2459,7 +2459,7 @@ export class Cline {
 									serverName: removeClosingTag("server_name", server_name),
 									toolName: removeClosingTag("tool_name", tool_name),
 									arguments: removeClosingTag("arguments", mcp_arguments),
-								} satisfies ClineAskUseMcpServer)
+								} satisfies mayaiAskUseMcpServer)
 
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "use_mcp_server")
@@ -2497,7 +2497,7 @@ export class Cline {
 										this.consecutiveMistakeCount++
 										await this.say(
 											"error",
-											`Cline tried to use ${tool_name} with an invalid JSON argument. Retrying...`,
+											`mayai tried to use ${tool_name} with an invalid JSON argument. Retrying...`,
 										)
 										pushToolResult(
 											formatResponse.toolError(
@@ -2514,7 +2514,7 @@ export class Cline {
 									serverName: server_name,
 									toolName: tool_name,
 									arguments: mcp_arguments,
-								} satisfies ClineAskUseMcpServer)
+								} satisfies mayaiAskUseMcpServer)
 
 								const isToolAutoApproved = this.providerRef
 									.deref()
@@ -2527,7 +2527,7 @@ export class Cline {
 									this.consecutiveAutoApprovedRequestsCount++
 								} else {
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to use ${tool_name} on ${server_name}`,
+										`mayai wants to use ${tool_name} on ${server_name}`,
 									)
 									this.removeLastPartialMessageIfExistsWithType("say", "use_mcp_server")
 									const didApprove = await askApproval("use_mcp_server", completeMessage)
@@ -2580,7 +2580,7 @@ export class Cline {
 									type: "access_mcp_resource",
 									serverName: removeClosingTag("server_name", server_name),
 									uri: removeClosingTag("uri", uri),
-								} satisfies ClineAskUseMcpServer)
+								} satisfies mayaiAskUseMcpServer)
 
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "use_mcp_server")
@@ -2609,7 +2609,7 @@ export class Cline {
 									type: "access_mcp_resource",
 									serverName: server_name,
 									uri,
-								} satisfies ClineAskUseMcpServer)
+								} satisfies mayaiAskUseMcpServer)
 
 								if (this.shouldAutoApproveTool(block.name)) {
 									this.removeLastPartialMessageIfExistsWithType("ask", "use_mcp_server")
@@ -2617,7 +2617,7 @@ export class Cline {
 									this.consecutiveAutoApprovedRequestsCount++
 								} else {
 									showNotificationForApprovalIfAutoApprovalEnabled(
-										`Cline wants to access ${uri} on ${server_name}`,
+										`mayai wants to access ${uri} on ${server_name}`,
 									)
 									this.removeLastPartialMessageIfExistsWithType("say", "use_mcp_server")
 									const didApprove = await askApproval("use_mcp_server", completeMessage)
@@ -2667,7 +2667,7 @@ export class Cline {
 
 								if (this.autoApprovalSettings.enabled && this.autoApprovalSettings.enableNotifications) {
 									showSystemNotification({
-										subtitle: "Cline has a question...",
+										subtitle: "mayai has a question...",
 										message: question.replace(/\n/g, " "),
 									})
 								}
@@ -2703,7 +2703,7 @@ export class Cline {
 
 								// if (this.autoApprovalSettings.enabled && this.autoApprovalSettings.enableNotifications) {
 								// 	showSystemNotification({
-								// 		subtitle: "Cline has a response...",
+								// 		subtitle: "mayai has a response...",
 								// 		message: response.replace(/\n/g, " "),
 								// 	})
 								// }
@@ -2751,7 +2751,7 @@ export class Cline {
 						let resultToSend = result
 						if (command) {
 							await this.say("completion_result", resultToSend)
-							// TODO: currently we don't handle if this command fails, it could be useful to let cline know and retry
+							// TODO: currently we don't handle if this command fails, it could be useful to let mayai know and retry
 							const [didUserReject, commandResult] = await this.executeCommand(command, true)
 							// if we received non-empty string, the command was rejected or failed
 							if (commandResult) {
@@ -2773,7 +2773,7 @@ export class Cline {
 							// Add newchanges flag if there are new changes to the workspace
 
 							const hasNewChanges = await this.doesLatestTaskCompletionHaveNewChanges()
-							const lastCompletionResultMessage = findLast(this.clineMessages, (m) => m.say === "completion_result")
+							const lastCompletionResultMessage = findLast(this.mayaiMessages, (m) => m.say === "completion_result")
 							if (
 								lastCompletionResultMessage &&
 								hasNewChanges &&
@@ -2781,17 +2781,17 @@ export class Cline {
 							) {
 								lastCompletionResultMessage.text += COMPLETION_RESULT_CHANGES_FLAG
 							}
-							await this.saveClineMessages()
+							await this.savemayaiMessages()
 						}
 
 						try {
-							const lastMessage = this.clineMessages.at(-1)
+							const lastMessage = this.mayaiMessages.at(-1)
 							if (block.partial) {
 								if (command) {
 									// the attempt_completion text is done, now we're getting command
 									// remove the previous partial attempt_completion ask, replace with say, post state to webview, then stream command
 
-									// const secondLastMessage = this.clineMessages.at(-2)
+									// const secondLastMessage = this.mayaiMessages.at(-2)
 									// NOTE: we do not want to auto approve a command run as part of the attempt_completion tool
 									if (lastMessage && lastMessage.ask === "command") {
 										// update command
@@ -2938,27 +2938,27 @@ export class Cline {
 		}
 	}
 
-	async recursivelyMakeClineRequests(
+	async recursivelyMakemayaiRequests(
 		userContent: UserContent,
 		includeFileDetails: boolean = false,
 		isNewTask: boolean = false,
 	): Promise<boolean> {
 		if (this.abort) {
-			throw new Error("Cline instance aborted")
+			throw new Error("mayai instance aborted")
 		}
 
 		if (this.consecutiveMistakeCount >= 3) {
 			if (this.autoApprovalSettings.enabled && this.autoApprovalSettings.enableNotifications) {
 				showSystemNotification({
 					subtitle: "Error",
-					message: "Cline is having trouble. Would you like to continue the task?",
+					message: "mayai is having trouble. Would you like to continue the task?",
 				})
 			}
 			const { response, text, images } = await this.ask(
 				"mistake_limit_reached",
 				this.api.getModel().id.includes("claude")
 					? `This may indicate a failure in his thought process or inability to use a tool properly, which can be mitigated with some user guidance (e.g. "Try breaking down the task into smaller steps").`
-					: "Cline uses complex prompts and iterative task execution that may be challenging for less capable models. For best results, it's recommended to use Claude 3.5 Sonnet for its advanced agentic coding capabilities.",
+					: "mayai uses complex prompts and iterative task execution that may be challenging for less capable models. For best results, it's recommended to use Claude 3.5 Sonnet for its advanced agentic coding capabilities.",
 			)
 			if (response === "messageResponse") {
 				userContent.push(
@@ -2981,22 +2981,22 @@ export class Cline {
 			if (this.autoApprovalSettings.enableNotifications) {
 				showSystemNotification({
 					subtitle: "Max Requests Reached",
-					message: `Cline has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests.`,
+					message: `mayai has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests.`,
 				})
 			}
 			await this.ask(
 				"auto_approval_max_req_reached",
-				`Cline has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests. Would you like to reset the count and proceed with the task?`,
+				`mayai has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests. Would you like to reset the count and proceed with the task?`,
 			)
 			// if we get past the promise it means the user approved and did not start a new task
 			this.consecutiveAutoApprovedRequestsCount = 0
 		}
 
 		// get previous api req's index to check token usage and determine if we need to truncate conversation history
-		const previousApiReqIndex = findLastIndex(this.clineMessages, (m) => m.say === "api_req_started")
+		const previousApiReqIndex = findLastIndex(this.mayaiMessages, (m) => m.say === "api_req_started")
 
 		// Save checkpoint if this is the first API request
-		const isFirstRequest = this.clineMessages.filter((m) => m.say === "api_req_started").length === 0
+		const isFirstRequest = this.mayaiMessages.filter((m) => m.say === "api_req_started").length === 0
 		if (isFirstRequest) {
 			await this.say("checkpoint_created") // no hash since we need to wait for CheckpointTracker to be initialized
 		}
@@ -3020,17 +3020,17 @@ export class Cline {
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : "Unknown error"
 				console.error("Failed to initialize checkpoint tracker:", errorMessage)
-				this.checkpointTrackerErrorMessage = errorMessage // will be displayed right away since we saveClineMessages next which posts state to webview
+				this.checkpointTrackerErrorMessage = errorMessage // will be displayed right away since we savemayaiMessages next which posts state to webview
 			}
 		}
 
 		// Now that checkpoint tracker is initialized, update the dummy checkpoint_created message with the commit hash. (This is necessary since we use the API request loading as an opportunity to initialize the checkpoint tracker, which can take some time)
 		if (isFirstRequest) {
 			const commitHash = await this.checkpointTracker?.commit()
-			const lastCheckpointMessage = findLast(this.clineMessages, (m) => m.say === "checkpoint_created")
+			const lastCheckpointMessage = findLast(this.mayaiMessages, (m) => m.say === "checkpoint_created")
 			if (lastCheckpointMessage) {
 				lastCheckpointMessage.lastCheckpointHash = commitHash
-				await this.saveClineMessages()
+				await this.savemayaiMessages()
 			}
 		}
 
@@ -3045,11 +3045,11 @@ export class Cline {
 		})
 
 		// since we sent off a placeholder api_req_started message to update the webview while waiting to actually start the API request (to load potential details for example), we need to update the text of that message
-		const lastApiReqIndex = findLastIndex(this.clineMessages, (m) => m.say === "api_req_started")
-		this.clineMessages[lastApiReqIndex].text = JSON.stringify({
+		const lastApiReqIndex = findLastIndex(this.mayaiMessages, (m) => m.say === "api_req_started")
+		this.mayaiMessages[lastApiReqIndex].text = JSON.stringify({
 			request: userContent.map((block) => formatContentBlockToMarkdown(block)).join("\n\n"),
-		} satisfies ClineApiReqInfo)
-		await this.saveClineMessages()
+		} satisfies mayaiApiReqInfo)
+		await this.savemayaiMessages()
 		await this.providerRef.deref()?.postStateToWebview()
 
 		try {
@@ -3062,9 +3062,9 @@ export class Cline {
 			// update api_req_started. we can't use api_req_finished anymore since it's a unique case where it could come after a streaming message (ie in the middle of being updated or executed)
 			// fortunately api_req_finished was always parsed out for the gui anyways, so it remains solely for legacy purposes to keep track of prices in tasks from history
 			// (it's worth removing a few months from now)
-			const updateApiReqMsg = (cancelReason?: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
-				this.clineMessages[lastApiReqIndex].text = JSON.stringify({
-					...JSON.parse(this.clineMessages[lastApiReqIndex].text || "{}"),
+			const updateApiReqMsg = (cancelReason?: mayaiApiReqCancelReason, streamingFailedMessage?: string) => {
+				this.mayaiMessages[lastApiReqIndex].text = JSON.stringify({
+					...JSON.parse(this.mayaiMessages[lastApiReqIndex].text || "{}"),
 					tokensIn: inputTokens,
 					tokensOut: outputTokens,
 					cacheWrites: cacheWriteTokens,
@@ -3074,22 +3074,22 @@ export class Cline {
 						calculateApiCost(this.api.getModel().info, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens),
 					cancelReason,
 					streamingFailedMessage,
-				} satisfies ClineApiReqInfo)
+				} satisfies mayaiApiReqInfo)
 			}
 
-			const abortStream = async (cancelReason: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
+			const abortStream = async (cancelReason: mayaiApiReqCancelReason, streamingFailedMessage?: string) => {
 				if (this.diffViewProvider.isEditing) {
 					await this.diffViewProvider.revertChanges() // closes diff view
 				}
 
 				// if last message is a partial we need to update and save it
-				const lastMessage = this.clineMessages.at(-1)
+				const lastMessage = this.mayaiMessages.at(-1)
 				if (lastMessage && lastMessage.partial) {
 					// lastMessage.ts = Date.now() DO NOT update ts since it is used as a key for virtuoso list
 					lastMessage.partial = false
 					// instead of streaming partialMessage events, we do a save and post like normal to persist to disk
 					console.log("updating partial message", lastMessage)
-					// await this.saveClineMessages()
+					// await this.savemayaiMessages()
 				}
 
 				// Let assistant know their response was interrupted for when task is resumed
@@ -3111,7 +3111,7 @@ export class Cline {
 
 				// update api_req_started to have cancelled and cost, so that we can display the cost of the partial stream
 				updateApiReqMsg(cancelReason, streamingFailedMessage)
-				await this.saveClineMessages()
+				await this.savemayaiMessages()
 
 				// signals to provider that it can retrieve the saved messages from disk, as abortTask can not be awaited on in nature
 				this.didFinishAbortingStream = true
@@ -3173,7 +3173,7 @@ export class Cline {
 					if (this.abort) {
 						console.log("aborting stream...")
 						if (!this.abandoned) {
-							// only need to gracefully abort if this instance isn't abandoned (sometimes openrouter stream hangs, in which case this would affect future instances of cline)
+							// only need to gracefully abort if this instance isn't abandoned (sometimes openrouter stream hangs, in which case this would affect future instances of mayai)
 							await abortStream("user_cancelled")
 						}
 						break // aborts the stream
@@ -3195,7 +3195,7 @@ export class Cline {
 					}
 				}
 			} catch (error) {
-				// abandoned happens when extension is no longer waiting for the cline instance to finish aborting (error is thrown here when any function in the for loop throws due to this.abort)
+				// abandoned happens when extension is no longer waiting for the mayai instance to finish aborting (error is thrown here when any function in the for loop throws due to this.abort)
 				if (!this.abandoned) {
 					this.abortTask() // if the stream failed, there's various states the task could be in (i.e. could have streamed some tools the user may have executed), so we just resort to replicating a cancel task
 					const errorMessage = this.formatErrorWithStatusCode(error)
@@ -3203,7 +3203,7 @@ export class Cline {
 					await abortStream("streaming_failed", errorMessage)
 					const history = await this.providerRef.deref()?.getTaskWithId(this.taskId)
 					if (history) {
-						await this.providerRef.deref()?.initClineWithHistoryItem(history.historyItem)
+						await this.providerRef.deref()?.initmayaiWithHistoryItem(history.historyItem)
 						// await this.providerRef.deref()?.postStateToWebview()
 					}
 				}
@@ -3213,7 +3213,7 @@ export class Cline {
 
 			// need to call here in case the stream was aborted
 			if (this.abort) {
-				throw new Error("Cline instance aborted")
+				throw new Error("mayai instance aborted")
 			}
 
 			this.didCompleteReadingStream = true
@@ -3230,7 +3230,7 @@ export class Cline {
 			}
 
 			updateApiReqMsg()
-			await this.saveClineMessages()
+			await this.savemayaiMessages()
 			await this.providerRef.deref()?.postStateToWebview()
 
 			// now add to apiconversationhistory
@@ -3264,7 +3264,7 @@ export class Cline {
 					this.consecutiveMistakeCount++
 				}
 
-				const recDidEndLoop = await this.recursivelyMakeClineRequests(this.userMessageContent)
+				const recDidEndLoop = await this.recursivelyMakemayaiRequests(this.userMessageContent)
 				didEndLoop = recDidEndLoop
 			} else {
 				// if there's no assistant_responses, that means we got no text or tool_use content blocks from API which we should assume is an error
@@ -3321,15 +3321,15 @@ export class Cline {
 	async getEnvironmentDetails(includeFileDetails: boolean = false) {
 		let details = ""
 
-		// It could be useful for cline to know if the user went from one or no file to another between messages, so we always include this context
+		// It could be useful for mayai to know if the user went from one or no file to another between messages, so we always include this context
 		details += "\n\n# VSCode Visible Files"
 		const visibleFilePaths = vscode.window.visibleTextEditors
 			?.map((editor) => editor.document?.uri?.fsPath)
 			.filter(Boolean)
 			.map((absolutePath) => path.relative(cwd, absolutePath))
 
-		// Filter paths through clineIgnoreController
-		const allowedVisibleFiles = this.clineIgnoreController
+		// Filter paths through mayaiIgnoreController
+		const allowedVisibleFiles = this.mayaiIgnoreController
 			.filterPaths(visibleFilePaths)
 			.map((p) => p.toPosix())
 			.join("\n")
@@ -3347,8 +3347,8 @@ export class Cline {
 			.filter(Boolean)
 			.map((absolutePath) => path.relative(cwd, absolutePath))
 
-		// Filter paths through clineIgnoreController
-		const allowedOpenTabs = this.clineIgnoreController
+		// Filter paths through mayaiIgnoreController
+		const allowedOpenTabs = this.mayaiIgnoreController
 			.filterPaths(openTabPaths)
 			.map((p) => p.toPosix())
 			.join("\n")
@@ -3381,7 +3381,7 @@ export class Cline {
 		// we want to get diagnostics AFTER terminal cools down for a few reasons: terminal could be scaffolding a project, dev servers (compilers like webpack) will first re-compile and then send diagnostics, etc
 		/*
 		let diagnosticsDetails = ""
-		const diagnostics = await this.diagnosticsMonitor.getCurrentDiagnostics(this.didEditFile || terminalWasBusy) // if cline ran a command (ie npm install) or edited the workspace then wait a bit for updated diagnostics
+		const diagnostics = await this.diagnosticsMonitor.getCurrentDiagnostics(this.didEditFile || terminalWasBusy) // if mayai ran a command (ie npm install) or edited the workspace then wait a bit for updated diagnostics
 		for (const [uri, fileDiagnostics] of diagnostics) {
 			const problems = fileDiagnostics.filter((d) => d.severity === vscode.DiagnosticSeverity.Error)
 			if (problems.length > 0) {
@@ -3468,7 +3468,7 @@ export class Cline {
 				details += "(Desktop files not shown automatically. Use list_files to explore if needed.)"
 			} else {
 				const [files, didHitLimit] = await listFiles(cwd, true, 200)
-				const result = formatResponse.formatFilesList(cwd, files, didHitLimit, this.clineIgnoreController)
+				const result = formatResponse.formatFilesList(cwd, files, didHitLimit, this.mayaiIgnoreController)
 				details += result
 			}
 		}

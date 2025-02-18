@@ -9,7 +9,7 @@ export const SYSTEM_PROMPT = async (
 	supportsComputerUse: boolean,
 	mcpHub: McpHub,
 	browserSettings: BrowserSettings,
-) => `You are Cline, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
+) => `You are mayai, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
 
 ====
 
@@ -959,18 +959,18 @@ You accomplish a given task iteratively, breaking it down into clear steps and w
 
 export function addUserInstructions(
 	settingsCustomInstructions?: string,
-	clineRulesFileInstructions?: string,
-	clineIgnoreInstructions?: string,
+	mayaiRulesFileInstructions?: string,
+	mayaiIgnoreInstructions?: string,
 ) {
 	let customInstructions = ""
 	if (settingsCustomInstructions) {
 		customInstructions += settingsCustomInstructions + "\n\n"
 	}
-	if (clineRulesFileInstructions) {
-		customInstructions += clineRulesFileInstructions + "\n\n"
+	if (mayaiRulesFileInstructions) {
+		customInstructions += mayaiRulesFileInstructions + "\n\n"
 	}
-	if (clineIgnoreInstructions) {
-		customInstructions += clineIgnoreInstructions
+	if (mayaiIgnoreInstructions) {
+		customInstructions += mayaiIgnoreInstructions
 	}
 
 	return `

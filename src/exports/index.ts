@@ -1,9 +1,9 @@
 import * as vscode from "vscode"
-import { ClineProvider } from "../core/webview/ClineProvider"
-import { ClineAPI } from "./cline"
+import { mayaiProvider } from "../core/webview/mayaiProvider"
+import { mayaiAPI } from "./mayai"
 
-export function createClineAPI(outputChannel: vscode.OutputChannel, sidebarProvider: ClineProvider): ClineAPI {
-	const api: ClineAPI = {
+export function createmayaiAPI(outputChannel: vscode.OutputChannel, sidebarProvider: mayaiProvider): mayaiAPI {
+	const api: mayaiAPI = {
 		setCustomInstructions: async (value: string) => {
 			await sidebarProvider.updateCustomInstructions(value)
 			outputChannel.appendLine("Custom instructions set")

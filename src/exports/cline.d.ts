@@ -1,4 +1,4 @@
-export interface ClineAPI {
+export interface mayaiAPI {
 	/**
 	 * Sets the custom instructions in the global storage.
 	 * @param value The custom instructions to be saved.

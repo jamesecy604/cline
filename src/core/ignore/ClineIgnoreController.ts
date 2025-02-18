@@ -8,20 +8,20 @@ export const LOCK_TEXT_SYMBOL = "\u{1F512}"
 
 /**
  * Controls LLM access to files by enforcing ignore patterns.
- * Designed to be instantiated once in Cline.ts and passed to file manipulation services.
- * Uses the 'ignore' library to support standard .gitignore syntax in .clineignore files.
+ * Designed to be instantiated once in mayai.ts and passed to file manipulation services.
+ * Uses the 'ignore' library to support standard .gitignore syntax in .mayaiignore files.
  */
-export class ClineIgnoreController {
+export class mayaiIgnoreController {
 	private cwd: string
 	private ignoreInstance: Ignore
 	private disposables: vscode.Disposable[] = []
-	clineIgnoreContent: string | undefined
+	mayaiIgnoreContent: string | undefined
 
 	constructor(cwd: string) {
 		this.cwd = cwd
 		this.ignoreInstance = ignore()
-		this.clineIgnoreContent = undefined
-		// Set up file watcher for .clineignore
+		this.mayaiIgnoreContent = undefined
+		// Set up file watcher for .mayaiignore
 		this.setupFileWatcher()
 	}
 
@@ -30,26 +30,26 @@ export class ClineIgnoreController {
 	 * Must be called after construction and before using the controller
 	 */
 	async initialize(): Promise<void> {
-		await this.loadClineIgnore()
+		await this.loadmayaiIgnore()
 	}
 
 	/**
-	 * Set up the file watcher for .clineignore changes
+	 * Set up the file watcher for .mayaiignore changes
 	 */
 	private setupFileWatcher(): void {
-		const clineignorePattern = new vscode.RelativePattern(this.cwd, ".clineignore")
-		const fileWatcher = vscode.workspace.createFileSystemWatcher(clineignorePattern)
+		const mayaiignorePattern = new vscode.RelativePattern(this.cwd, ".mayaiignore")
+		const fileWatcher = vscode.workspace.createFileSystemWatcher(mayaiignorePattern)
 
 		// Watch for changes and updates
 		this.disposables.push(
 			fileWatcher.onDidChange(() => {
-				this.loadClineIgnore()
+				this.loadmayaiIgnore()
 			}),
 			fileWatcher.onDidCreate(() => {
-				this.loadClineIgnore()
+				this.loadmayaiIgnore()
 			}),
 			fileWatcher.onDidDelete(() => {
-				this.loadClineIgnore()
+				this.loadmayaiIgnore()
 			}),
 		)
 
@@ -58,24 +58,24 @@ export class ClineIgnoreController {
 	}
 
 	/**
-	 * Load custom patterns from .clineignore if it exists
+	 * Load custom patterns from .mayaiignore if it exists
 	 */
-	private async loadClineIgnore(): Promise<void> {
+	private async loadmayaiIgnore(): Promise<void> {
 		try {
 			// Reset ignore instance to prevent duplicate patterns
 			this.ignoreInstance = ignore()
-			const ignorePath = path.join(this.cwd, ".clineignore")
+			const ignorePath = path.join(this.cwd, ".mayaiignore")
 			if (await fileExistsAtPath(ignorePath)) {
 				const content = await fs.readFile(ignorePath, "utf8")
-				this.clineIgnoreContent = content
+				this.mayaiIgnoreContent = content
 				this.ignoreInstance.add(content)
-				this.ignoreInstance.add(".clineignore")
+				this.ignoreInstance.add(".mayaiignore")
 			} else {
-				this.clineIgnoreContent = undefined
+				this.mayaiIgnoreContent = undefined
 			}
 		} catch (error) {
 			// Should never happen: reading file failed even though it exists
-			console.error("Unexpected error loading .clineignore:", error)
+			console.error("Unexpected error loading .mayaiignore:", error)
 		}
 	}
 
@@ -85,8 +85,8 @@ export class ClineIgnoreController {
 	 * @returns true if file is accessible, false if ignored
 	 */
 	validateAccess(filePath: string): boolean {
-		// Always allow access if .clineignore does not exist
-		if (!this.clineIgnoreContent) {
+		// Always allow access if .mayaiignore does not exist
+		if (!this.mayaiIgnoreContent) {
 			return true
 		}
 		try {
@@ -109,8 +109,8 @@ export class ClineIgnoreController {
 	 * @returns path of file that is being accessed if it is being accessed, undefined if command is allowed
 	 */
 	validateCommand(command: string): string | undefined {
-		// Always allow if no .clineignore exists
-		if (!this.clineIgnoreContent) {
+		// Always allow if no .mayaiignore exists
+		if (!this.mayaiIgnoreContent) {
 			return undefined
 		}
 
