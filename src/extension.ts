@@ -4,7 +4,7 @@ import delay from "delay"
 import * as vscode from "vscode"
 import { mayaiProvider } from "./core/webview/mayaiProvider"
 import { Logger } from "./services/logging/Logger"
-import { createmayaiAPI } from "./exports"
+import { createmayaiAPI } from "./exports/"
 import "./utils/path" // necessary to have access to String.prototype.toPosix
 import { DIFF_VIEW_URI_SCHEME } from "./integrations/editor/DiffViewProvider"
 
