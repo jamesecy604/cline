@@ -44,17 +44,17 @@
 		"viewsContainers": {
 			"activitybar": [
 				{
-					"id": "claude-dev-ActivityBar",
+					"id": "mayai-ActivityBar",
 					"title": "mayai",
 					"icon": "assets/icons/icon.svg"
 				}
 			]
 		},
 		"views": {
-			"claude-dev-ActivityBar": [
+			"mayai-ActivityBar": [
 				{
 					"type": "webview",
-					"id": "claude-dev.SidebarProvider",
+					"id": "mayai.SidebarProvider",
 					"name": ""
 				}
 			]
@@ -96,27 +96,27 @@
 				{
 					"command": "mayai.plusButtonClicked",
 					"group": "navigation@1",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == mayai.SidebarProvider"
 				},
 				{
 					"command": "mayai.mcpButtonClicked",
 					"group": "navigation@2",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == mayai.SidebarProvider"
 				},
 				{
 					"command": "mayai.historyButtonClicked",
 					"group": "navigation@3",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == mayai.SidebarProvider"
 				},
 				{
 					"command": "mayai.popoutButtonClicked",
 					"group": "navigation@4",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == mayai.SidebarProvider"
 				},
 				{
 					"command": "mayai.settingsButtonClicked",
 					"group": "navigation@5",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == mayai.SidebarProvider"
 				}
 			]
 		},
