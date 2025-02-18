@@ -38,7 +38,10 @@
 		"ai",
 		"llama"
 	],
-	"activationEvents": [],
+	"activationEvents": [
+		"onStartupFinished",
+    	"onView:mayai.SidebarProvider"
+	],
 	"main": "./dist/extension.js",
 	"contributes": {
 		"viewsContainers": {
@@ -55,7 +58,8 @@
 				{
 					"type": "webview",
 					"id": "mayai.SidebarProvider",
-					"name": ""
+					"name": "Mayai",
+					"visibility":"visible"
 				}
 			]
 		},
