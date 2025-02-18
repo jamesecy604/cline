@@ -1,5 +1,5 @@
 # Changelog
 
-## [3.4.0]
+## [1.4.0]
 
 First deployment
