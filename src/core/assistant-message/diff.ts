@@ -327,10 +327,6 @@ export async function constructNewFileContent(diffContent: string, originalConte
 			currentSearchContent += line + "\n"
 		} else if (inReplace) {
 			currentReplaceContent += line + "\n"
-			// Output replacement lines immediately if we know the insertion point
-			if (searchMatchIndex !== -1) {
-				result += line + "\n"
-			}
 		}
 	}
 
