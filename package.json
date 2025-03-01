@@ -40,7 +40,7 @@
 	],
 	"activationEvents": [
 		"onStartupFinished",
-    	"onView:mayai.SidebarProvider"
+		"onView:mayai.SidebarProvider"
 	],
 	"main": "./dist/extension.js",
 	"contributes": {
@@ -59,7 +59,7 @@
 					"type": "webview",
 					"id": "mayai.SidebarProvider",
 					"name": "Mayai",
-					"visibility":"visible"
+					"visibility": "visible"
 				}
 			]
 		},
