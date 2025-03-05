@@ -15,6 +15,7 @@
 		"rootDir": ".",
 		"skipLibCheck": true,
 		"sourceMap": true,
+		"outDir": "./out",
 		"strict": true,
 		"target": "es2022",
 		"useDefineForClassFields": true,
