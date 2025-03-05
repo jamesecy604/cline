@@ -42,11 +42,13 @@ const AppContent = () => {
 						setShowAccount(false)
 						break
 					case "accountLoginClicked":
-						setShowSettings(false)
-						setShowHistory(false)
-						setShowMcp(false)
-						setShowAccount(true)
-						break
+						setShowSettings(false);
+						setShowHistory(false);
+						setShowMcp(false);
+						setShowAccount(true);
+						// Open the login page
+						window.open("http://localhost:3000/api/auth/signin", "_blank");
+						break;
 					case "chatButtonClicked":
 						setShowSettings(false)
 						setShowHistory(false)

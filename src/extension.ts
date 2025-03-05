@@ -39,12 +39,18 @@ export function activate(context: vscode.ExtensionContext) {
   
 	// Authentication check before executing commands
 	const executeWithAuth = async (command: () => void) => {
-	  const authenticated = await isAuthenticated();
-	  if (!authenticated) {
-		vscode.window.showErrorMessage("You must be logged in to use this extension.");
-		return;
-	  }
-	  command();
+		const authenticated = await isAuthenticated();
+		if (!authenticated) {
+		  const selection = await vscode.window.showErrorMessage(
+			"You must be logged in to use this extension.",
+			"Login"
+		  );
+		  if (selection === "Login") {
+			vscode.commands.executeCommand("mayai.login");
+		  }
+		  return;
+		}
+		command();
 	};
   
 	context.subscriptions.push(
@@ -134,15 +140,20 @@ export function activate(context: vscode.ExtensionContext) {
 	);
   
 	context.subscriptions.push(
-	  vscode.commands.registerCommand("mayai.accountLoginClicked", () => {
-		executeWithAuth(() => {
+		vscode.commands.registerCommand("mayai.login", async () => {
+		  const loginUrl = "http://localhost:3000/api/auth/signin"; // Adjust URL as needed
+		  vscode.env.openExternal(vscode.Uri.parse(loginUrl));
+		})
+	  );
+   
+	  context.subscriptions.push(
+		vscode.commands.registerCommand("mayai.accountLoginClicked", () => {
 		  sidebarProvider.postMessageToWebview({
 			type: "action",
 			action: "accountLoginClicked",
 		  });
-		});
-	  })
-	);
+		})
+	  );
   
 	const diffContentProvider = new (class implements vscode.TextDocumentContentProvider {
 	  provideTextDocumentContent(uri: vscode.Uri): string {
