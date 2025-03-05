@@ -65,6 +65,13 @@
 			"label": "tasks: watch-tests",
 			"dependsOn": ["npm: watch", "npm: watch-tests"],
 			"problemMatcher": []
+		},
+		{
+			"label": "npm: watch",
+			"type": "npm",
+			"script": "watch",
+			"isBackground": true,
+			"problemMatcher": "$tsc-watch"
 		}
 	]
 }
