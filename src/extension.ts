@@ -141,7 +141,7 @@ export function activate(context: vscode.ExtensionContext) {
   
 	context.subscriptions.push(
 		vscode.commands.registerCommand("mayai.login", async () => {
-		  const loginUrl = "http://localhost:3000/api/auth/signin"; // Adjust URL as needed
+		  const loginUrl = "http://localhost:3000/signin"; // Adjust URL as needed
 		  vscode.env.openExternal(vscode.Uri.parse(loginUrl));
 		})
 	  );

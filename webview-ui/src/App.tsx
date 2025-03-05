@@ -47,7 +47,7 @@ const AppContent = () => {
 						setShowMcp(false);
 						setShowAccount(true);
 						// Open the login page
-						window.open("http://localhost:3000/api/auth/signin", "_blank");
+						window.open("http://localhost:3000/signin", "_blank");
 						break;
 					case "chatButtonClicked":
 						setShowSettings(false)
